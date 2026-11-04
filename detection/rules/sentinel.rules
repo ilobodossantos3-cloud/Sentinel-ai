@@ -1,0 +1,15 @@
+# SentinelAI — Example Suricata Rules
+#
+# Usage notes:
+#   suricata -T -c /etc/suricata/suricata.yaml   # test config
+#   suricatasc -c reload-rules                   # reload without restart
+#
+# For real deployments, prefer the Emerging Threats (open) ruleset;
+# these are minimal examples consistent with the sample eve log in
+# detection/suricata/eve.sample.json.
+
+# Rapid SSH connections (brute force pattern)
+alert tcp any any -> $HOME_NET 22 (msg:"ET SCAN Rapid SSH Connection Attempts Possible Brute Force Attack"; flow:to_server,established; detection_filter:track by_src, count 5, seconds 30; classtype:attempted-admin; sid:2027159; rev:3;)
+
+# Basic SQL injection patterns in URLs
+alert http any any -> $HOME_NET any (msg:"ET WEB_SERVER SQL Injection Attempt"; flow:to_server,established; content:"SQL"; nocase; http_uri; pcre:"/(%27|')\s*(or|union|select)/iU"; classtype:web-application-attack; sid:2019136; rev:5;)
