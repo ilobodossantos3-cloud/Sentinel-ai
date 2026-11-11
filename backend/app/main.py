@@ -6,6 +6,8 @@ from app.core.database import Base, engine
 
 from app.models.incident import Incident
 from app.models.incident_analysis import IncidentAnalysis
+from app.models.asset import Asset
+from app.models.job import Job
 
 from app.api.incidents import router as incidents_router
 from app.api.incident_analysis import router as analysis_router

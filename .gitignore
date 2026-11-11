@@ -16,3 +16,6 @@ frontend/dist/
 # Databases locais
 *.db
 *.sqlite
+
+# Test artefacts
+.pytest_cache/

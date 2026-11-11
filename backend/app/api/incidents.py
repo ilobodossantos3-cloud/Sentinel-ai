@@ -13,13 +13,15 @@ from app.core.database import get_db
 
 from app.schemas.incident import (
     IncidentCreate,
-    IncidentResponse
+    IncidentResponse,
+    IncidentUpdate
 )
 
 from app.services.incident_service import (
     create_incident,
     get_incidents,
-    get_incident
+    get_incident,
+    update_incident_status
 )
 
 from app.services.incident_analysis_service import (
@@ -37,21 +39,57 @@ router = APIRouter(
 
 def run_ai_analysis(incident_id: int):
     from app.core.database import SessionLocal
+    from app.models.job import Job
+    from app.services import job_service
     from app.services.incident_service import get_incident as load
     from app.services.incident_analysis_service import create_ai_analysis as analyze
+
+    # Job tracking: o estado do trabalho fica visível
+    # e consultável (regra: toda a tarefa tem estado).
+    setup_db = SessionLocal()
+    job = job_service.create_job(
+        setup_db,
+        kind="ai_analysis",
+        payload={"incident_id": incident_id}
+    )
+    job_id = job.id
+    setup_db.close()
 
     db = SessionLocal()
 
     try:
+        job = db.get(Job, job_id)
+        job_service.mark_running(job)
+        db.commit()
+
         incident = load(db, incident_id)
 
         if incident:
-            analyze(db, incident)
-    except Exception:
+            analysis = analyze(db, incident)
+            job_service.mark_completed(
+                job,
+                result={"analysis_id": analysis.id}
+            )
+        else:
+            job_service.mark_failed(
+                job,
+                error=f"incident {incident_id} not found"
+            )
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
         logger.exception(
             "AI analysis failed for incident %s",
             incident_id
         )
+        try:
+            job_service.mark_failed(job, error=str(exc))
+            db.commit()
+        except Exception:
+            logger.exception(
+                "could not record failure for job %s", job_id
+            )
     finally:
         db.close()
 
@@ -119,6 +157,30 @@ def get_one(
         )
 
     return incident
+
+
+@router.patch(
+    "/{incident_id}",
+    response_model=IncidentResponse
+)
+def patch_status(
+    incident_id: int,
+    update: IncidentUpdate,
+    db: Session = Depends(get_db)
+):
+    incident = get_incident(db, incident_id)
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    return update_incident_status(
+        db,
+        incident,
+        update.status.value
+    )
 
 
 @router.post(

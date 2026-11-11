@@ -5,10 +5,19 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Severity(str, Enum):
+    INFORMATIONAL = "INFORMATIONAL"
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
+
+
+class IncidentStatus(str, Enum):
+    NEW = "new"
+    INVESTIGATING = "investigating"
+    CONFIRMED = "confirmed"
+    FALSE_POSITIVE = "false_positive"
+    CLOSED = "closed"
 
 
 class IncidentCreate(BaseModel):
@@ -29,5 +38,12 @@ class IncidentCreate(BaseModel):
 class IncidentResponse(IncidentCreate):
     id: int
     created_at: datetime
+    status: IncidentStatus = IncidentStatus.NEW
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class IncidentUpdate(BaseModel):
+    """Partial update — investigation workflow."""
+
+    status: IncidentStatus

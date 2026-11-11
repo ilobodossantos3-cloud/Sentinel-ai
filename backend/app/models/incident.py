@@ -6,6 +6,12 @@ from app.core.database import Base
 
 
 class Incident(Base):
+    """Detection alert raised by a sensor (e.g. Suricata).
+
+    Lifecycle (status):
+      new -> investigating -> confirmed | false_positive -> closed
+    """
+
     __tablename__ = "incidents"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -21,6 +27,9 @@ class Incident(Base):
     event_type = Column(String(100), nullable=False)
 
     severity = Column(String(20), nullable=False, index=True)
+
+    # new | investigating | confirmed | false_positive | closed
+    status = Column(String(20), nullable=False, default="new", index=True)
 
     description = Column(Text, nullable=True)
 
