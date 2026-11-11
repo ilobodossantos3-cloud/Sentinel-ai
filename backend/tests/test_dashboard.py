@@ -223,3 +223,38 @@ def test_register_asset_endpoint(db_session, client):
     matching = [a for a in assets if a["ip"] == "192.168.1.7"]
     assert len(matching) == 1
     assert matching[0]["name"] == "gateway-2"
+
+
+# --- threat intelligence -------------------------------------
+
+
+def test_threat_intel_aggregates_real_analyses(db_session, client):
+    from app.models.incident_analysis import IncidentAnalysis
+    from app.models.incident import Incident as IncidentModel
+
+    incident = make_incident(db_session)
+    db_session.add(IncidentAnalysis(
+        incident_id=incident.id,
+        threat_level="CRITICAL",
+        risk_score=90,
+        classification="brute force",
+        confidence=0.9,
+        analysis="ok",
+        indicators=[{"type": "ip", "value": "203.0.113.10"}],
+        recommended_actions=["block"],
+    ))
+    db_session.commit()
+
+    intel = client.get("/threat-intel").json()
+
+    assert intel["analyses_considered"] == 1
+    assert intel["threat_levels"]["CRITICAL"] == 1
+    assert intel["indicators"][0]["value"] == "203.0.113.10"
+    assert intel["indicators"][0]["incident_id"] == incident.id
+
+
+def test_threat_intel_empty_is_empty_not_fabricated(client):
+    intel = client.get("/threat-intel").json()
+    assert intel["analyses_considered"] == 0
+    assert intel["indicators"] == []
+    assert intel["threat_levels"] == {}

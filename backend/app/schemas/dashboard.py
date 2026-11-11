@@ -67,3 +67,12 @@ class ActivityItem(BaseModel):
     timestamp: str | None = None
     summary: str
     detail: dict = {}
+
+
+class ThreatIntelResponse(BaseModel):
+    # IOCs aggregated from the AI analyses of real incidents
+    analyses_considered: int
+
+    threat_levels: dict[str, int]
+
+    indicators: list

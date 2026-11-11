@@ -12,6 +12,42 @@ from app.services.asset_service import (
 )
 
 
+def get_threat_intel(db: Session, limit: int = 25) -> dict:
+    """Aggregate IOCs and threat levels from the AI analyses
+    of real incidents (no external feeds yet, no fabricated data)."""
+    from app.models.incident_analysis import IncidentAnalysis
+
+    analyses = (
+        db.query(IncidentAnalysis)
+        .order_by(IncidentAnalysis.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    threat_counts: dict[str, int] = {}
+    indicators: list = []
+
+    for analysis in analyses:
+        threat_counts[analysis.threat_level] = (
+            threat_counts.get(analysis.threat_level, 0) + 1
+        )
+
+        for indicator in analysis.indicators or []:
+            if isinstance(indicator, dict):
+                entry = dict(indicator)
+            else:
+                entry = {"value": str(indicator)}
+
+            entry["incident_id"] = analysis.incident_id
+            indicators.append(entry)
+
+    return {
+        "analyses_considered": len(analyses),
+        "threat_levels": threat_counts,
+        "indicators": indicators,
+    }
+
+
 def get_alert_stats(db: Session) -> dict:
     incidents = db.query(Incident).all()
 

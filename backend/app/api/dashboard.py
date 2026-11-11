@@ -7,6 +7,7 @@ from app.schemas.dashboard import (
     ActivityItem,
     AlertStatsResponse,
     PostureResponse,
+    ThreatIntelResponse,
     TopologyResponse,
 )
 
@@ -14,6 +15,7 @@ from app.services.posture_service import compute_posture
 from app.services.stats_service import (
     get_activity,
     get_alert_stats,
+    get_threat_intel,
     get_topology,
 )
 
@@ -59,3 +61,11 @@ def activity(
     db: Session = Depends(get_db)
 ):
     return get_activity(db, limit=limit)
+
+
+@router.get(
+    "/threat-intel",
+    response_model=ThreatIntelResponse
+)
+def threat_intel(db: Session = Depends(get_db)):
+    return get_threat_intel(db)
