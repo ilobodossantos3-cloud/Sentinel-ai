@@ -11,6 +11,8 @@ from app.models.job import Job
 
 from app.api.incidents import router as incidents_router
 from app.api.incident_analysis import router as analysis_router
+from app.api.assets import router as assets_router
+from app.api.dashboard import router as dashboard_router
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,6 +44,8 @@ app.add_middleware(
 
 app.include_router(incidents_router)
 app.include_router(analysis_router)
+app.include_router(assets_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

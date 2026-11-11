@@ -78,11 +78,19 @@ Regras de exemplo: `detection/rules/sentinel.rules`.
 | GET | `/` | state da API |
 | GET | `/health` | health (inclui verificação à BD) |
 | GET | `/incidents/` | listar (`?severity=&skip=&limit=`) |
-| POST | `/incidents/` | criar incidente (análise IA em background) |
+| POST | `/incidents/` | criar incidente (análise IA em background, rastreada em jobs) |
 | POST | `/incidents/simulate` | incidente simulado (SSH brute force) |
 | GET | `/incidents/{id}` | detalhe |
+| PATCH | `/incidents/{id}` | actualizar estado (ciclo de vida de investigação) |
 | GET | `/incidents/{id}/analysis` | análise IA |
 | POST | `/incidents/{id}/analysis` | re-gerar análise IA |
+| GET | `/assets/` | inventário de ativos (estado derivado de dados reais) |
+| POST | `/assets/` | registar ativo manualmente |
+| GET | `/assets/{ip}` | detalhe do ativo + incidentes recentes |
+| GET | `/stats/alerts` | contagens por severidade e estado |
+| GET | `/topology` | nós/arestas/eventos para o dashboard |
+| GET | `/posture` | score de segurança calculado de dados reais |
+| GET | `/activity` | feed de atividade da plataforma |
 
 ## Configuração
 
