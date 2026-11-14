@@ -149,6 +149,29 @@ def test_hsts_checked_on_https_targets():
     assert not any("strict-transport-security" in t.lower() for t in titles_http)
 
 
+def test_cookie_and_powered_by_checks():
+    """Unit: cookie flags and X-Powered-By disclosure."""
+    fake_response = {
+        "status": 200,
+        "headers": {
+            "set-cookie": "session=abc123; HttpOnly",
+            "x-powered-by": "Express",
+        },
+    }
+
+    findings = audit_engine.check_security_headers(
+        fake_response, "https://example.com"
+    )
+    titles = [f["title"] for f in findings]
+    assert any("Cookie without security flags" in t for t in titles)
+    assert any("X-Powered-By" in t for t in titles)
+
+    # cookie finding must name the missing flags precisely
+    cookie = next(f for f in findings if "Cookie" in f["title"])
+    assert "Secure ausente" in cookie["impact"]
+    assert "SameSite ausente" in cookie["impact"]
+
+
 def test_audit_unreachable_target_fails_honestly(client, db_session, monkeypatch):
     monkeypatch.setattr("app.api.audits.run_audit", lambda audit_id: None)
 

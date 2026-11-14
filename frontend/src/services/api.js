@@ -31,6 +31,16 @@ export const getAssetDetail = (ip) =>
 export const registerAsset = (data) =>
   api.post("/assets/", data).then((r) => r.data);
 
+// audits
+export const getAudits = () =>
+  api.get("/audits/").then((r) => r.data);
+
+export const getAuditDetail = (id) =>
+  api.get(`/audits/${id}`).then((r) => r.data);
+
+export const createAudit = (data) =>
+  api.post("/audits/", data).then((r) => r.data);
+
 // dashboard
 export const getTopology = () =>
   api.get("/topology").then((r) => r.data);

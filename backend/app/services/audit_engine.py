@@ -98,6 +98,8 @@ def check_security_headers(response: dict, base_url: str) -> list[dict]:
             issues.append("HttpOnly ausente")
         if "secure" not in lowered:
             issues.append("Secure ausente")
+        if "samesite" not in lowered:
+            issues.append("SameSite ausente")
         if issues:
             findings.append({
                 "category": "webapp",
@@ -105,8 +107,19 @@ def check_security_headers(response: dict, base_url: str) -> list[dict]:
                 "severity": "MEDIUM",
                 "evidence": f"Set-Cookie: {set_cookie}",
                 "impact": "; ".join(issues) + " — risco de roubo de sessão.",
-                "recommendation": "Definir HttpOnly e Secure nos cookies.",
+                "recommendation": "Definir HttpOnly, Secure e SameSite nos cookies.",
             })
+
+    powered_by = headers.get("x-powered-by")
+    if powered_by:
+        findings.append({
+            "category": "recon",
+            "title": "X-Powered-By disclosure",
+            "severity": "INFORMATIONAL",
+            "evidence": f"Header X-Powered-By: {powered_by}",
+            "impact": "Expõe a stack tecnológica, facilitando recon.",
+            "recommendation": "Remover o header X-Powered-By.",
+        })
 
     return findings
 
