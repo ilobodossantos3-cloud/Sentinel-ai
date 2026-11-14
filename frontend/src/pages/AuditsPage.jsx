@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { createAudit, getAuditDetail, getAudits } from "../services/api";
+import {
+  compareAudits,
+  createAudit,
+  getAuditDetail,
+  getAuditReport,
+  getAudits,
+  patchFindingStatus,
+} from "../services/api";
 import { usePolling, timeAgo } from "../hooks";
 
 const AUDIT_STATUS = {
@@ -37,6 +44,11 @@ export default function AuditsPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [report, setReport] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [compareWith, setCompareWith] = useState("");
+  const [comparison, setComparison] = useState(null);
+  const [compareError, setCompareError] = useState(null);
 
   const refresh = () =>
     getAudits().then(setAudits).catch(() => setAudits([]));
@@ -46,11 +58,52 @@ export default function AuditsPage() {
   const open = async (id) => {
     setSelected(id);
     setDetail(null);
+    setReport(null);
+    setCompareWith("");
+    setComparison(null);
+    setCompareError(null);
     try {
       setDetail(await getAuditDetail(id));
     } catch {
       setDetail({ error: true });
     }
+  };
+
+  const loadReport = async () => {
+    setLoadingReport(true);
+    try {
+      setReport(await getAuditReport(selected));
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  const downloadReport = () => {
+    const blob = new Blob([report || ""], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `sentinelai-auditoria-${selected}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const runCompare = async (otherId) => {
+    setCompareWith(otherId);
+    setComparison(null);
+    setCompareError(null);
+    if (!otherId) return;
+    try {
+      setComparison(await compareAudits(selected, Number(otherId)));
+    } catch (err) {
+      const msg = err?.response?.data?.detail;
+      setCompareError(typeof msg === "string" ? msg : "Erro na comparação.");
+    }
+  };
+
+  const markFinding = async (findingId, status) => {
+    await patchFindingStatus(selected, findingId, status);
+    setDetail(await getAuditDetail(selected));
   };
 
   const submit = async (e) => {
@@ -208,6 +261,119 @@ export default function AuditsPage() {
                   <p className="muted" style={{ margin: "0 0 10px" }}>{detail.summary}</p>
                 )}
 
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                  <button
+                    className="active"
+                    onClick={loadReport}
+                    disabled={loadingReport}
+                    style={{ fontSize: 11.5, padding: "6px 12px" }}
+                  >
+                    {loadingReport ? "a gerar…" : "Relatório"}
+                  </button>
+
+                  <select
+                    value={compareWith}
+                    onChange={(e) => runCompare(e.target.value)}
+                    style={{
+                      background: "#081019",
+                      border: "1px solid var(--panel-border-soft)",
+                      color: "var(--text)",
+                      borderRadius: 8,
+                      padding: "6px 10px",
+                      fontSize: 11.5,
+                    }}
+                  >
+                    <option value="">Comparar com…</option>
+                    {audits
+                      ?.filter((a) => a.id !== selected && a.target_id === detail.target_id && a.finished_at)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>#{a.id} ({timeAgo(a.finished_at)})</option>
+                      ))}
+                  </select>
+                </div>
+
+                {report && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <b style={{ fontSize: 12 }}>Relatório (markdown)</b>
+                      <button onClick={downloadReport} style={{ fontSize: 11, padding: "4px 10px" }}>
+                        ⬇ Descarregar .md
+                      </button>
+                    </div>
+                    <pre
+                      style={{
+                        background: "rgba(6,12,22,.8)",
+                        border: "1px solid var(--panel-border-soft)",
+                        borderRadius: 6,
+                        padding: "10px 12px",
+                        fontSize: 11,
+                        color: "var(--text-dim)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        maxHeight: 260,
+                        overflow: "auto",
+                      }}
+                    >
+{report}
+                    </pre>
+                  </div>
+                )}
+
+                {compareError && <div className="state error">{compareError}</div>}
+
+                {comparison && (
+                  <div style={{ marginBottom: 14 }}>
+                    <b style={{ fontSize: 12 }}>
+                      Comparação #{comparison.audit_a} → #{comparison.audit_b}
+                    </b>
+                    <div className="kv" style={{ margin: "8px 0" }}>
+                      <div><span>Score A</span><b style={{ color: scoreColor(comparison.score_a) }}>{comparison.score_a ?? "—"}</b></div>
+                      <div><span>Score B</span><b style={{ color: scoreColor(comparison.score_b) }}>{comparison.score_b ?? "—"}</b></div>
+                      <div>
+                        <span>Delta</span>
+                        <b style={{ color: comparison.score_delta >= 0 ? "var(--green)" : "var(--red)" }}>
+                          {comparison.score_delta >= 0 ? "+" : ""}{comparison.score_delta}
+                        </b>
+                      </div>
+                    </div>
+                    {comparison.appeared?.length > 0 && (
+                      <div className="list-item" style={{ display: "block" }}>
+                        <span className="sev HIGH" style={{ fontSize: 10 }}>APARECEU</span>
+                        <ul style={{ margin: "6px 0 0 16px", padding: 0, fontSize: 11.5 }}>
+                          {comparison.appeared.map((f) => (
+                            <li key={f.title}>[{f.severity}] {f.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {comparison.disappeared?.length > 0 && (
+                      <div className="list-item" style={{ display: "block" }}>
+                        <span className="sev INFORMATIONAL" style={{ fontSize: 10 }}>DESAPARECEU</span>
+                        <ul style={{ margin: "6px 0 0 16px", padding: 0, fontSize: 11.5 }}>
+                          {comparison.disappeared.map((f) => (
+                            <li key={f.title}>[{f.severity}] {f.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {comparison.persistent?.length > 0 && (
+                      <div className="list-item" style={{ display: "block" }}>
+                        <span className="st investigating" style={{ fontSize: 10 }}>PERSISTE</span>
+                        <ul style={{ margin: "6px 0 0 16px", padding: 0, fontSize: 11.5 }}>
+                          {comparison.persistent.map((f) => (
+                            <li key={f.title}>
+                              {f.title}
+                              {f.severity_changed && (
+                                <span className="muted"> ({f.severity_a} → {f.severity_b})</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {detail.error && (
                   <div className="state error">{detail.error}</div>
                 )}
@@ -222,6 +388,29 @@ export default function AuditsPage() {
                       <span className={`sev ${f.severity}`}>{f.severity}</span>
                       <b style={{ fontSize: 12.5 }}>{f.title}</b>
                       <span className="when">{f.category}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, margin: "6px 0" }}>
+                      <button
+                        onClick={() => markFinding(f.id, "open")}
+                        style={{ fontSize: 10, padding: "3px 8px" }}
+                        disabled={f.status === "open"}
+                      >
+                        aberto
+                      </button>
+                      <button
+                        onClick={() => markFinding(f.id, "fixed")}
+                        style={{ fontSize: 10, padding: "3px 8px" }}
+                        disabled={f.status === "fixed"}
+                      >
+                        corrigido
+                      </button>
+                      <button
+                        onClick={() => markFinding(f.id, "accepted")}
+                        style={{ fontSize: 10, padding: "3px 8px" }}
+                        disabled={f.status === "accepted"}
+                      >
+                        aceite
+                      </button>
                     </div>
                     <pre
                       style={{

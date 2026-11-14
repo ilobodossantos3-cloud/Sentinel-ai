@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -48,3 +50,7 @@ class AuditResponse(BaseModel):
 class AuditDetailResponse(AuditResponse):
     target_url: str
     findings: list[AuditFindingResponse] = Field(default_factory=list)
+
+
+class FindingStatusUpdate(BaseModel):
+    status: Literal["open", "fixed", "accepted"]

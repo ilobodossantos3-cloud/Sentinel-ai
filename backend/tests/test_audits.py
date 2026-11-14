@@ -128,6 +128,113 @@ def test_audit_lifecycle_with_local_server(client, db_session, local_server, mon
     )
 
 
+def test_report_contains_evidence(client, local_server, monkeypatch):
+    monkeypatch.setattr("app.api.audits.run_audit", lambda audit_id: None)
+    created = client.post("/audits/", json={"url": local_server, "authorized": True})
+    run_audit(created.json()["id"])
+
+    response = client.get(f"/audits/{created.json()['id']}/report")
+
+    assert response.status_code == 200
+    assert "text/markdown" in response.headers["content-type"]
+
+    report = response.text
+    assert f"Relatório de Auditoria #{created.json()['id']}" in report
+    assert local_server in report
+    # real evidence made it into the report
+    assert "nginx/1.24.0" in report
+    assert "Recomendação:" in report
+
+
+def test_compare_runs_appeared_disappeared_persistent(
+    client, local_server, monkeypatch
+):
+    monkeypatch.setattr("app.api.audits.run_audit", lambda audit_id: None)
+
+    # run A: real local server (server version disclosed, no cookie)
+    created_a = client.post("/audits/", json={"url": local_server, "authorized": True})
+    run_audit(created_a.json()["id"])
+
+    # run B: canned response WITHOUT Server version, WITH cookie
+    def fake_get(url, timeout=10):
+        return {
+            "url": url,
+            "status": 200,
+            "headers": {
+                "content-type": "text/html",
+                "set-cookie": "sid=1; HttpOnly; Secure",
+            },
+            "body": "<html>ok</html>",
+            "error": None,
+        }
+
+    monkeypatch.setattr("app.services.audit_engine.http_get", fake_get)
+    created_b = client.post("/audits/", json={"url": local_server, "authorized": True})
+    run_audit(created_b.json()["id"])
+
+    response = client.get(
+        "/audits/compare",
+        params={"a": created_a.json()["id"], "b": created_b.json()["id"]}
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["audit_a"] == created_a.json()["id"]
+    assert data["target_id"] == created_a.json()["target_id"]
+    assert isinstance(data["score_delta"], int)
+
+    titles_a = [t["title"] for t in data["disappeared"]]
+    titles_b = [t["title"] for t in data["appeared"]]
+    persistent_titles = [t["title"] for t in data["persistent"]]
+
+    # Server version was in A, gone in B
+    assert any("Server version disclosed" in t for t in titles_a)
+    assert not any("Server version disclosed" in t for t in titles_b)
+
+    # cookie finding appears in B (headers changed)
+    assert any("Cookie without security flags" in t for t in titles_b)
+
+    # missing CSP existed in both -> persistent
+    assert any("content-security-policy" in t.lower() for t in persistent_titles)
+
+    # scores differ between the two runs
+    assert data["score_a"] != data["score_b"]
+
+
+def test_compare_rejects_different_targets(client, local_server, monkeypatch):
+    monkeypatch.setattr("app.api.audits.run_audit", lambda audit_id: None)
+    a = client.post("/audits/", json={"url": local_server, "authorized": True})
+    b = client.post("/audits/", json={"url": "http://127.0.0.1:9/", "authorized": True})
+
+    response = client.get(
+        "/audits/compare",
+        params={"a": a.json()["id"], "b": b.json()["id"]}
+    )
+    assert response.status_code == 400
+    assert "same target" in response.json()["detail"]
+
+
+def test_patch_finding_status(client, local_server, monkeypatch, db_session):
+    monkeypatch.setattr("app.api.audits.run_audit", lambda audit_id: None)
+    created = client.post("/audits/", json={"url": local_server, "authorized": True})
+    run_audit(created.json()["id"])
+    finding_id = created and client.get(f"/audits/{created.json()['id']}").json()["findings"][0]["id"]
+
+    response = client.patch(
+        f"/audits/{created.json()['id']}/findings/{finding_id}",
+        json={"status": "fixed"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "fixed"
+
+    # invalid status rejected
+    bad = client.patch(
+        f"/audits/{created.json()['id']}/findings/{finding_id}",
+        json={"status": "whatever"},
+    )
+    assert bad.status_code == 422
+
+
 def test_hsts_checked_on_https_targets():
     """Unit: HSTS missing is flagged only for https targets."""
     fake_https = {

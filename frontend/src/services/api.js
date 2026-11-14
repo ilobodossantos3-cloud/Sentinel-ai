@@ -41,6 +41,22 @@ export const getAuditDetail = (id) =>
 export const createAudit = (data) =>
   api.post("/audits/", data).then((r) => r.data);
 
+export const getAuditReport = (id) =>
+  api
+    .get(`/audits/${id}/report`, {
+      responseType: "text",
+      transformResponse: [(d) => d],
+    })
+    .then((r) => r.data);
+
+export const compareAudits = (a, b) =>
+  api.get("/audits/compare", { params: { a, b } }).then((r) => r.data);
+
+export const patchFindingStatus = (auditId, findingId, status) =>
+  api
+    .patch(`/audits/${auditId}/findings/${findingId}`, { status })
+    .then((r) => r.data);
+
 // dashboard
 export const getTopology = () =>
   api.get("/topology").then((r) => r.data);

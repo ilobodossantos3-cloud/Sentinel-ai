@@ -91,6 +91,9 @@ Regras de exemplo: `detection/rules/sentinel.rules`.
 | GET | `/audits/` | listar auditorias |
 | POST | `/audits/` | lançar auditoria não destrutiva (exige `authorized: true`) |
 | GET | `/audits/{id}` | detalhe + achados com evidência técnica |
+| GET | `/audits/{id}/report` | relatório markdown com evidências |
+| GET | `/audits/compare?a=&b=` | comparação de duas auditorias do mesmo alvo |
+| PATCH | `/audits/{id}/findings/{fid}` | estado do achado (open/fixed/accepted) |
 | GET | `/stats/alerts` | contagens por severidade e estado |
 | GET | `/topology` | nós/arestas/eventos para o dashboard |
 | GET | `/posture` | score de segurança calculado de dados reais |

@@ -4,8 +4,10 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException
+    HTTPException,
+    Query
 )
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -17,10 +19,12 @@ from app.schemas.audit import (
     AuditCreate,
     AuditDetailResponse,
     AuditResponse,
+    FindingStatusUpdate,
 )
 
 from app.services import job_service
 from app.services.audit_engine import run_audit
+from app.services.audit_report import build_report, compare_audits
 
 
 router = APIRouter(
@@ -106,6 +110,113 @@ def list_audits(db: Session = Depends(get_db)):
         .limit(50)
         .all()
     )
+
+
+@router.get(
+    "/compare",
+    response_model=dict
+)
+def compare_runs(
+    a: int = Query(..., description="ID da auditoria base"),
+    b: int = Query(..., description="ID da auditoria a comparar"),
+    db: Session = Depends(get_db)
+):
+    """Compare two finished audits. Both must target the same target."""
+    audit_a = db.get(Audit, a)
+    audit_b = db.get(Audit, b)
+
+    if not audit_a or not audit_b:
+        raise HTTPException(
+            status_code=404,
+            detail="Audit not found"
+        )
+
+    if audit_a.target_id != audit_b.target_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison only makes sense between audits of the same target"
+        )
+
+    for audit in (audit_a, audit_b):
+        if not audit.finished_at:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Audit #{audit.id} has not finished yet"
+            )
+
+    findings_a = (
+        db.query(AuditFinding)
+        .filter(AuditFinding.audit_id == audit_a.id)
+        .all()
+    )
+    findings_b = (
+        db.query(AuditFinding)
+        .filter(AuditFinding.audit_id == audit_b.id)
+        .all()
+    )
+
+    return compare_audits(audit_a, audit_b, findings_a, findings_b)
+
+
+@router.get(
+    "/{audit_id}/report",
+    response_class=PlainTextResponse
+)
+def audit_report(audit_id: int, db: Session = Depends(get_db)):
+    """Markdown report with all findings and technical evidence."""
+    audit = db.get(Audit, audit_id)
+
+    if not audit:
+        raise HTTPException(
+            status_code=404,
+            detail="Audit not found"
+        )
+
+    target = db.get(AuditTarget, audit.target_id)
+
+    findings = (
+        db.query(AuditFinding)
+        .filter(AuditFinding.audit_id == audit.id)
+        .order_by(AuditFinding.id.asc())
+        .all()
+    )
+
+    return PlainTextResponse(
+        content=build_report(audit, target, findings),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+@router.patch(
+    "/{audit_id}/findings/{finding_id}",
+    response_model=dict
+)
+def update_finding_status(
+    audit_id: int,
+    finding_id: int,
+    update: FindingStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """Operator marks a finding open | fixed | accepted."""
+    finding = (
+        db.query(AuditFinding)
+        .filter(
+            AuditFinding.id == finding_id,
+            AuditFinding.audit_id == audit_id,
+        )
+        .first()
+    )
+
+    if not finding:
+        raise HTTPException(
+            status_code=404,
+            detail="Finding not found"
+        )
+
+    finding.status = update.status
+    db.commit()
+
+    return {"id": finding.id, "status": finding.status}
 
 
 @router.get(
