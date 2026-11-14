@@ -3,59 +3,12 @@
 The audit engine runs against a real LOCAL http server
 (no external network). Non-destructive checks only.
 """
-import threading
-import http.server
-import socketserver
-
 import pytest
 
 from app.models.audit import Audit, AuditFinding, AuditTarget
 from app.models.job import Job
 from app.services import audit_engine
 from app.services.audit_engine import run_audit
-
-
-BANNER = b"""HTTP/1.1 200 OK
-Server: nginx/1.24.0
-Content-Type: text/html
-Content-Length: 6
-
-<html>ok</html>
-"""
-
-
-class LocalHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/robots.txt":
-            self.send_response(200)
-            self.send_header("Server", "nginx/1.24.0")
-            self.send_header("Content-Type", "text/plain")
-            body = b"User-agent: *\nDisallow: /admin\n"
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        self.send_response(200)
-        self.send_header("Server", "nginx/1.24.0")
-        self.send_header("Content-Type", "text/html")
-        body = b"<html>ok</html>"
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args):
-        pass
-
-
-@pytest.fixture
-def local_server():
-    with socketserver.TCPServer(("127.0.0.1", 0), LocalHandler) as server:
-        port = server.server_address[1]
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        yield f"http://127.0.0.1:{port}"
-        server.shutdown()
 
 
 def test_audit_requires_explicit_authorization(client):

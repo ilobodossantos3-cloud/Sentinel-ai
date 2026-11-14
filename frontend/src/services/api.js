@@ -57,6 +57,16 @@ export const patchFindingStatus = (auditId, findingId, status) =>
     .patch(`/audits/${auditId}/findings/${findingId}`, { status })
     .then((r) => r.data);
 
+// vulnerabilities (derived from audit findings)
+export const getVulnerabilities = (params) =>
+  api.get("/vulnerabilities/", { params }).then((r) => r.data);
+
+export const getVulnerabilityDetail = (vulnId) =>
+  api.get(`/vulnerabilities/${vulnId}`).then((r) => r.data);
+
+export const patchVulnerabilityStatus = (vulnId, status) =>
+  api.patch(`/vulnerabilities/${vulnId}`, { status }).then((r) => r.data);
+
 // dashboard
 export const getTopology = () =>
   api.get("/topology").then((r) => r.data);

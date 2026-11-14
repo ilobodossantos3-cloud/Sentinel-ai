@@ -5,7 +5,7 @@ const NAV = [
   { id: "threats", label: "Threats" },
   { id: "assets", label: "Assets" },
   { id: "audits", label: "Audits" },
-  { id: "vulnerabilities", label: "Vulnerabilities", phase: "Fase 2/3" },
+  { id: "vulnerabilities", label: "Vulnerabilities" },
   { id: "network", label: "Network", phase: "Fase 5" },
   { id: "logs", label: "Logs", phase: "Fase 5" },
   { id: "reports", label: "Reports", phase: "Fase 2" },

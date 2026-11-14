@@ -5,10 +5,10 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import ThreatsPage from "./pages/ThreatsPage.jsx";
 import AssetsPage from "./pages/AssetsPage.jsx";
 import AuditsPage from "./pages/AuditsPage.jsx";
+import VulnerabilitiesPage from "./pages/VulnerabilitiesPage.jsx";
 
 // Rotas ainda sem implementação real (nunca dados falsos).
 const PLACEHOLDERS = {
-  vulnerabilities: { phase: "Fase 2/3", text: "Inventário de vulnerabilidades (CVE/CVSS) com estado de correção, alimentado pelas verificações e auditorias." },
   network: { phase: "Fase 5", text: "Monitorização de rede detalhada e correlação de eventos." },
   logs: { phase: "Fase 5", text: "Consulta e correlação de logs." },
   reports: { phase: "Fase 2", text: "Relatórios técnicos centralizados, com exportação e comparação de auditorias." },
@@ -51,6 +51,7 @@ export default function App() {
     : route === "threats" ? <ThreatsPage />
     : route === "assets" ? <AssetsPage />
     : route === "audits" ? <AuditsPage />
+    : route === "vulnerabilities" ? <VulnerabilitiesPage />
     : PLACEHOLDERS[route] ? <Placeholder route={route} />
     : <DashboardPage />;
 
