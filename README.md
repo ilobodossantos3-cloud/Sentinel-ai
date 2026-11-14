@@ -1,8 +1,10 @@
 # SentinelAI
 
-Plataforma de deteção e análise de incidentes de cibersegurança assistida por IA.
+Plataforma SOC de deteção e análise de incidentes de cibersegurança assistida por IA.
 
-Os alertas do **Suricata IDS** são ingeridos, guardados num **PostgreSQL** e analisados por um **LLM** (via OpenRouter), que produz classificação de ameaça, risk score, indicadores de compromisso e ações recomendadas. O painel web mostra tudo em tempo consultável.
+Os alertas do **Suricata IDS** são ingeridos, guardados em **PostgreSQL** (ou SQLite em dev)
+e analisados por um **LLM** (via OpenRouter), que produz classificação de ameaça, risk score,
+indicadores de compromisso e ações recomendadas. O painel web mostra tudo com dados 100% reais.
 
 ## Arquitectura
 
@@ -21,8 +23,8 @@ Os alertas do **Suricata IDS** são ingeridos, guardados num **PostgreSQL** e an
 
 | Pasta | Descrição |
 |---|---|
-| `backend/` | API FastAPI (incidentes + análise IA), SQLAlchemy, PostgreSQL |
-| `frontend/` | Painel React 19 + Vite |
+| `backend/` | API FastAPI (incidentes, ativos, auditorias), SQLAlchemy + Alembic |
+| `frontend/` | Painel React 19 + Vite (dashboard SOC, threats, assets, audits) |
 | `detection/` | Ingestor de logs EVE do Suricata (stdlib, sem dependências) |
 
 ## Setup
@@ -31,21 +33,18 @@ Os alertas do **Suricata IDS** são ingeridos, guardados num **PostgreSQL** e an
 
 ```bash
 cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env          # preencher credenciais
-.venv/bin/uvicorn app.main:app --reload
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt      # Windows
+cp .env.example .env                               # preencher credenciais
+.venv/Scripts/uvicorn app.main:app --port 8000
 ```
 
-Utilizadores Windows: `python -m venv .venv` + `Scripts\activate` (a venv é
-específica do OS — não partilhes a pasta entre Windows e WSL).
+Utilizadores Windows: `py -3.13 -m venv .venv` + `call .venv\Scripts\activate.bat`.
+A venv é específica do OS — não partilhes a pasta entre Windows e WSL.
 
-Migre as colunas de análise para JSONB (apenas se a BD já existia antes desta
-versão):
-
-```bash
-.venv/bin/python scripts/migrate_jsonb.py
-```
+Esquema da base de dados:
+- **dev**: `create_all` automático no arranque.
+- **produção**: `alembic upgrade head` (bases existentes: `alembic stamp head` primeiro).
 
 API em `http://127.0.0.1:8000` · docs interativas: `/docs` · health: `/health`
 
@@ -69,17 +68,18 @@ python3 detection/ingest.py /var/log/suricata/eve.json
 python3 detection/ingest.py detection/suricata/eve.sample.json --once
 ```
 
+Alertas → incidentes analisados por IA. Registos `flow`/`dns`/`http`/`tls`/`ssh`
+→ observações de tráfego (alimentam o inventário de ativos, nunca criam incidentes).
+
 Regras de exemplo: `detection/rules/sentinel.rules`.
 
 ## Endpoints
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/` | state da API |
 | GET | `/health` | health (inclui verificação à BD) |
 | GET | `/incidents/` | listar (`?severity=&skip=&limit=`) |
 | POST | `/incidents/` | criar incidente (análise IA em background, rastreada em jobs) |
-| POST | `/incidents/simulate` | incidente simulado (SSH brute force) |
 | GET | `/incidents/{id}` | detalhe |
 | PATCH | `/incidents/{id}` | actualizar estado (ciclo de vida de investigação) |
 | GET | `/incidents/{id}/analysis` | análise IA |
@@ -87,10 +87,22 @@ Regras de exemplo: `detection/rules/sentinel.rules`.
 | GET | `/assets/` | inventário de ativos (estado derivado de dados reais) |
 | POST | `/assets/` | registar ativo manualmente |
 | GET | `/assets/{ip}` | detalhe do ativo + incidentes recentes |
+| POST | `/ingest/observations` | observações de tráfego do ingester (não criam incidentes) |
+| GET | `/audits/` | listar auditorias |
+| POST | `/audits/` | lançar auditoria não destrutiva (exige `authorized: true`) |
+| GET | `/audits/{id}` | detalhe + achados com evidência técnica |
 | GET | `/stats/alerts` | contagens por severidade e estado |
 | GET | `/topology` | nós/arestas/eventos para o dashboard |
 | GET | `/posture` | score de segurança calculado de dados reais |
 | GET | `/activity` | feed de atividade da plataforma |
+| GET | `/threat-intel` | inteligência de ameaças agregada |
+
+## Testes
+
+```bash
+cd backend
+.venv/Scripts/python -m pytest tests/ -q
+```
 
 ## Configuração
 

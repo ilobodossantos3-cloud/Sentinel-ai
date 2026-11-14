@@ -181,37 +181,3 @@ def patch_status(
         incident,
         update.status.value
     )
-
-
-@router.post(
-    "/simulate",
-    response_model=IncidentResponse,
-    status_code=201
-)
-def simulate_attack(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-
-    incident_data = IncidentCreate(
-        source_ip="10.10.10.50",
-        destination_ip="10.10.10.10",
-        source_port=54321,
-        destination_port=22,
-        protocol="TCP",
-        event_type="SSH_BRUTE_FORCE",
-        severity="HIGH",
-        description="Simulated SSH brute-force attack for testing"
-    )
-
-    created_incident = create_incident(
-        db,
-        incident_data
-    )
-
-    background_tasks.add_task(
-        run_ai_analysis,
-        created_incident.id
-    )
-
-    return created_incident
