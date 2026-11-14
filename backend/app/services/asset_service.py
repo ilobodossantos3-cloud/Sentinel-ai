@@ -39,6 +39,10 @@ def upsert_asset_by_ip(db: Session, ip: str | None) -> Asset | None:
     if not asset:
         asset = Asset(ip=ip, first_seen_at=now)
         db.add(asset)
+        # Make it visible to later queries in the same transaction:
+        # SessionLocal runs with autoflush=False, so a batch containing
+        # the same IP twice would otherwise attempt a duplicate INSERT.
+        db.flush()
 
     asset.last_seen_at = now
 

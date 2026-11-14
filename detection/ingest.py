@@ -1,17 +1,13 @@
 """
-SentinelAI — Suricata EVE ingester.
+SentinelAI — Suricata EVE ingester (v2).
 
-Reads a Suricata EVE JSON log stream, converts alerts
-into SentinelAI incidents and POSTs them to the API.
+Reads a Suricata EVE JSON log stream and feeds the API:
+- `alert` records  -> POST /incidents/      (detections, AI-analysed)
+- flow/dns/http/tls/ssh records -> POST /ingest/observations
+  (traffic context: feeds the asset inventory, never creates incidents)
 
 Usage:
     python ingest.py <eve.json> [--url http://127.0.0.1:8000] [--once]
-
-Follow the live log continuously (default):
-    python ingest.py /var/log/suricata/eve.json
-
-Process only existing records and exit (for tests):
-    python ingest.py eve.sample.json --once
 
 Requires no third-party packages (stdlib only).
 """
@@ -31,13 +27,32 @@ SEVERITY_MAP = {
     4: "LOW",
 }
 
-# Events that do not describe a threat are ignored
 ALERT_EVENT_TYPES = {"alert"}
+
+# Event types that represent traffic context, not threats.
+OBSERVATION_EVENT_TYPES = {"flow", "dns", "http", "tls", "ssh"}
+
+OBSERVATION_BATCH = 25
+
+
+class Stats:
+    def __init__(self):
+        self.alerts = 0
+        self.observations = 0
+        self.ignored = 0
+        self.errors = 0
+
+    def summary(self):
+        return (
+            f"sessão: {self.alerts} alertas submetidos, "
+            f"{self.observations} observações de tráfego, "
+            f"{self.ignored} registos ignorados, {self.errors} erros"
+        )
 
 
 def map_eve_record(record: dict) -> dict | None:
     """
-    Convert an EVE record to an incident payload.
+    Convert an EVE alert record to an incident payload.
     Returns None when the record is not an actionable alert.
     """
     if record.get("event_type") not in ALERT_EVENT_TYPES:
@@ -49,8 +64,6 @@ def map_eve_record(record: dict) -> dict | None:
     if not src_ip:
         return None
 
-    severity_id = alert.get("severity")
-
     payload = {
         "source_ip": src_ip,
         "destination_ip": record.get("dest_ip"),
@@ -60,7 +73,7 @@ def map_eve_record(record: dict) -> dict | None:
         "event_type": alert.get("signature_id") and (
             f"SID_{alert['signature_id']}"
         ) or "UNKNOWN_ALERT",
-        "severity": SEVERITY_MAP.get(severity_id, "LOW"),
+        "severity": SEVERITY_MAP.get(alert.get("severity"), "LOW"),
         "description": alert.get("signature")
         or "Suricata alert without signature",
     }
@@ -68,61 +81,101 @@ def map_eve_record(record: dict) -> dict | None:
     return payload
 
 
-def post_incident(api_url: str, incident: dict) -> bool:
-    endpoint = f"{api_url.rstrip('/')}/incidents/"
+def extract_observations(record: dict) -> list[dict]:
+    """Traffic context records -> asset observations (no incidents)."""
+    if record.get("event_type") not in OBSERVATION_EVENT_TYPES:
+        return []
 
-    data = json.dumps(incident).encode("utf-8")
+    seen = []
+    for key in ("src_ip", "dest_ip"):
+        ip = record.get(key)
+        if ip:
+            seen.append({"ip": ip})
 
+    return seen
+
+
+def post_json(api_url: str, path: str, payload) -> dict | None:
     request = urllib.request.Request(
-        endpoint,
-        data=data,
+        f"{api_url.rstrip('/')}{path}",
+        data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
-            body = json.loads(response.read().decode("utf-8"))
-            print(
-                f"[+] incident #{body.get('id')} submitted "
-                f"({incident['event_type']})"
-            )
-            return True
+            return json.loads(response.read().decode("utf-8"))
 
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
         print(
-            f"[-] API returned {error.code} for "
-            f"{incident['event_type']}: {body}",
+            f"[-] API devolveu {error.code} para {path}: {body}",
             file=sys.stderr,
         )
 
     except (urllib.error.URLError, OSError) as error:
         print(
-            f"[-] could not reach API {api_url}: {error}",
+            f"[-] não foi possível contactar a API {api_url}: {error}",
             file=sys.stderr,
         )
 
-    return False
+    return None
 
 
-def is_json_line(line: str) -> bool:
-    stripped = line.strip()
-    return stripped.startswith("{")
+def submit_incident(api_url: str, incident: dict, stats: Stats) -> None:
+    body = post_json(api_url, "/incidents/", incident)
+
+    if body:
+        stats.alerts += 1
+        print(
+            f"[+] incidente #{body.get('id')} submetido "
+            f"({incident['event_type']})"
+        )
+    else:
+        stats.errors += 1
+
+
+def flush_observations(api_url: str, buffer: list, stats: Stats) -> None:
+    if not buffer:
+        return
+
+    body = post_json(
+        api_url,
+        "/ingest/observations",
+        [{"ip": item["ip"]} for item in buffer],
+    )
+
+    if body:
+        stats.observations += body.get("observed", len(buffer))
+
+    buffer.clear()
 
 
 def ingest_file(path: str, api_url: str, follow: bool):
-    """Read the file line by line; if follow=True, keep reading new lines (tail -f)."""
+    """Read the file line by line; if follow=True, keep reading new lines (tail -F)."""
+    stats = Stats()
+    observation_buffer: list[dict] = []
+
+    def flush():
+        flush_observations(api_url, observation_buffer, stats)
 
     with open(path, "r", encoding="utf-8") as log_file:
         if follow:
             log_file.seek(0, 2)  # tail -F: only new records
 
-        while True:
-            line = log_file.readline()
+        try:
+            while True:
+                line = log_file.readline()
 
-            if line:
-                if not is_json_line(line):
+                if not line:
+                    if follow:
+                        flush()
+                        time.sleep(0.5)
+                        continue
+                    break
+
+                if not line.strip().startswith("{"):
                     continue
 
                 try:
@@ -130,50 +183,58 @@ def ingest_file(path: str, api_url: str, follow: bool):
                 except json.JSONDecodeError:
                     continue
 
+                event_type = record.get("event_type")
+
                 incident = map_eve_record(record)
-
                 if incident:
-                    post_incident(api_url, incident)
+                    submit_incident(api_url, incident, stats)
+                    continue
 
-            elif follow:
-                time.sleep(0.5)
+                if event_type in OBSERVATION_EVENT_TYPES:
+                    observation_buffer.extend(extract_observations(record))
+                    if len(observation_buffer) >= OBSERVATION_BATCH:
+                        flush()
+                    continue
 
-            else:
-                break
+                stats.ignored += 1
+
+        except KeyboardInterrupt:
+            print("\ninterrompido")
+
+    flush()
+
+    print(stats.summary())
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Streaming ingester of Suricata EVE logs for SentinelAI"
+        description="Ingester de logs EVE do Suricata para a SentinelAI"
     )
 
     parser.add_argument(
         "eve_file",
-        help="Suricata EVE JSON log file"
+        help="ficheiro de log EVE JSON do Suricata"
     )
 
     parser.add_argument(
         "--url",
         default="http://127.0.0.1:8000",
-        help="SentinelAI API base URL (default: %(default)s)"
+        help="URL base da API SentinelAI (default: %(default)s)"
     )
 
     parser.add_argument(
         "--once",
         action="store_true",
-        help="process the current contents of the file and exit"
+        help="processar os registos existentes no ficheiro e sair"
     )
 
     args = parser.parse_args()
 
-    try:
-        ingest_file(
-            args.eve_file,
-            args.url,
-            follow=not args.once
-        )
-    except KeyboardInterrupt:
-        print("\ninterrupted")
+    ingest_file(
+        args.eve_file,
+        args.url,
+        follow=not args.once
+    )
 
 
 if __name__ == "__main__":

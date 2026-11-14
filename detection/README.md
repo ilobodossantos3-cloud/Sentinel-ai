@@ -33,6 +33,17 @@ python3 ingest.py eve.json --url http://10.10.10.10:8000
 
 Registos sem `event_type: alert` (ex.: `flow`) são ignorados.
 
+## Observações de tráfego (B4)
+
+Registos `flow`/`dns`/`http`/`tls`/`ssh` **não criam incidentes**: são
+enviados em batch (até 25 registos) para `POST /ingest/observations`
+e servem apenas para alimentar o inventário de ativos (`first_seen_at`,
+`last_seen_at`). Ativos criados assim ficam com `is_registered=False`
+(ativos observados, não registados manualmente).
+
+Ao sair (Ctrl+C), o ingester imprime o resumo da sessão: alertas
+submetidos, observações de tráfego, registos ignorados e erros.
+
 ## Regras
 
 `rules/sentinel.rules` — exemplos mínimos de regras Suricata coerentes com
@@ -47,4 +58,8 @@ outputs:
       filename: eve.json
       types:
         - alert
+        - flow
+        - dns
+        - http
+        - tls
 ```
