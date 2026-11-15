@@ -82,15 +82,21 @@ Regras de exemplo: `detection/rules/sentinel.rules`.
 | POST | `/incidents/` | criar incidente (análise IA em background, rastreada em jobs) |
 | GET | `/incidents/{id}` | detalhe |
 | PATCH | `/incidents/{id}` | actualizar estado (ciclo de vida de investigação) |
+| DELETE | `/incidents/{id}` | apagar incidente e análises |
 | GET | `/incidents/{id}/analysis` | análise IA |
 | POST | `/incidents/{id}/analysis` | re-gerar análise IA |
 | GET | `/assets/` | inventário de ativos (estado derivado de dados reais) |
 | POST | `/assets/` | registar ativo manualmente |
 | GET | `/assets/{ip}` | detalhe do ativo + incidentes recentes |
+| POST | `/assets/{ip}/audit` | análise de segurança imediata do ativo |
+| DELETE | `/assets/{ip}` | remover ativo (incidentes preservados) |
 | POST | `/ingest/observations` | observações de tráfego do ingester (não criam incidentes) |
 | GET | `/audits/` | listar auditorias |
 | POST | `/audits/` | lançar auditoria não destrutiva (exige `authorized: true`) |
 | GET | `/audits/{id}` | detalhe + achados com evidência técnica |
+| DELETE | `/audits/{id}` | apagar auditoria e achados |
+| POST | `/audits/sweep` | auditar todos os sistemas/ativos agora |
+| GET | `/audits/schedule` | estado da varredura automática |
 | GET | `/audits/{id}/report` | relatório markdown com evidências |
 | GET | `/audits/compare?a=&b=` | comparação de duas auditorias do mesmo alvo |
 | PATCH | `/audits/{id}/findings/{fid}` | estado do achado (open/fixed/accepted) |
@@ -121,3 +127,5 @@ Variáveis em `backend/.env` (ver `.env.example`):
   (em dev sem Postgres, `sqlite:///./sentinelai.db` também funciona)
 - `OPENROUTER_API_KEY` — chave da API (openrouter.ai/keys)
 - `OPENROUTER_MODEL` — modelo de análise (default: `z-ai/glm-5.3-flash`)
+- `AUDIT_SCHEDULE_ENABLED` — varredura automática de segurança (default: `true`)
+- `AUDIT_SCHEDULE_SECONDS` — intervalo da varredura (default: `120`)

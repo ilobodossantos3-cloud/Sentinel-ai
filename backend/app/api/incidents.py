@@ -181,3 +181,28 @@ def patch_status(
         incident,
         update.status.value
     )
+
+
+@router.delete(
+    "/{incident_id}",
+    status_code=200
+)
+def delete_incident(incident_id: int, db: Session = Depends(get_db)):
+    """Remove an incident and its AI analyses (operator housekeeping)."""
+    from app.models.incident_analysis import IncidentAnalysis
+    from app.models.incident import Incident
+
+    incident = db.get(Incident, incident_id)
+
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    (
+        db.query(IncidentAnalysis)
+        .filter(IncidentAnalysis.incident_id == incident_id)
+        .delete()
+    )
+    db.delete(incident)
+    db.commit()
+
+    return {"deleted": incident_id}

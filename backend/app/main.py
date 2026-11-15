@@ -22,6 +22,10 @@ from app.api.intel import router as intel_router, incident_intel_router
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
+
+from app.services.scheduler_service import start_scheduler
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -82,3 +86,10 @@ def health():
         "status": "healthy" if db_status == "connected" else "degraded",
         "database": db_status
     }
+
+
+@app.on_event("startup")
+def startup_scheduler():
+    """Start the periodic security sweep thread (if enabled)."""
+    if settings.AUDIT_SCHEDULE_ENABLED:
+        start_scheduler()

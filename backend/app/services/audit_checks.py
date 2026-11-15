@@ -86,3 +86,27 @@ def tls_info(host: str, port: int = 443, timeout: int = REQUEST_TIMEOUT) -> dict
         info["error"] = f"TLS connection failed: {error}"
 
     return info
+
+
+def determine_web_url(
+    host: str, timeout: int = 3
+) -> str | None:
+    """Probe an IP/hostname for a web service.
+
+    https preferred (even with invalid certs — that is itself a
+    finding); falls back to http. Returns None when neither is
+    reachable — the asset gets NO audit URL, and we honestly say so.
+    Module-level so tests can stub it.
+    """
+    # https first
+    try:
+        with socket.create_connection((host, 443), timeout=timeout):
+            return f"https://{host}"
+    except OSError:
+        pass
+
+    try:
+        with socket.create_connection((host, 80), timeout=timeout):
+            return f"http://{host}"
+    except OSError:
+        return None

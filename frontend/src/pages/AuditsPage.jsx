@@ -2,10 +2,13 @@ import { useState } from "react";
 import {
   compareAudits,
   createAudit,
+  deleteAudit,
   getAuditDetail,
   getAuditReport,
   getAudits,
+  getScheduleStatus,
   patchFindingStatus,
+  sweepAudits,
 } from "../services/api";
 import { usePolling, timeAgo } from "../hooks";
 
@@ -49,9 +52,13 @@ export default function AuditsPage() {
   const [compareWith, setCompareWith] = useState("");
   const [comparison, setComparison] = useState(null);
   const [compareError, setCompareError] = useState(null);
+  const [schedule, setSchedule] = useState(null);
+  const [sweepMsg, setSweepMsg] = useState(null);
 
-  const refresh = () =>
+  const refresh = () => {
     getAudits().then(setAudits).catch(() => setAudits([]));
+    getScheduleStatus().then(setSchedule).catch(() => {});
+  };
 
   usePolling(refresh, 5000);
 
@@ -138,7 +145,36 @@ export default function AuditsPage() {
             Verificações não destrutivas (só HTTP GET) em alvos autorizados
           </span>
         </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+          <button
+            className="active"
+            onClick={async () => {
+              try {
+                await sweepAudits();
+                setSweepMsg("Varredura lançada: todas as auditorias em curso.");
+                setTimeout(refresh, 3000);
+              } catch {
+                setSweepMsg("Falha ao lançar a varredura.");
+              }
+            }}
+            style={{ fontSize: 11.5, padding: "6px 14px" }}
+          >
+            ⚡ Analisar tudo agora
+          </button>
+          {schedule && (
+            <span className="muted" style={{ fontSize: 10.5 }}>
+              automática: a cada {schedule.interval_seconds}s
+              {schedule.last_run ? ` · última ${timeAgo(schedule.last_run)}` : " · nunca correu"}
+            </span>
+          )}
+        </div>
       </div>
+
+      {sweepMsg && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="state" style={{ margin: 0 }}>{sweepMsg}</div>
+        </div>
+      )}
 
       <div className="panel" style={{ marginBottom: 14 }}>
         <form onSubmit={submit} className="filters" style={{ alignItems: "center" }}>
@@ -239,7 +275,21 @@ export default function AuditsPage() {
                 <h2>Auditoria #{selected}</h2>
                 <span className="muted">{detail?.target_url || ""}</span>
               </div>
-              <button className="close-x" onClick={() => setSelected(null)}>✕</button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  title="Apagar auditoria"
+                  onClick={async () => {
+                    if (!window.confirm(`Apagar auditoria #${selected} e os seus achados?`)) return;
+                    await deleteAudit(selected);
+                    setSelected(null);
+                    refresh();
+                  }}
+                  style={{ fontSize: 11, padding: "4px 10px" }}
+                >
+                  🗑
+                </button>
+                <button className="close-x" onClick={() => setSelected(null)}>✕</button>
+              </div>
             </div>
 
             {!detail && <div className="state">a carregar…</div>}

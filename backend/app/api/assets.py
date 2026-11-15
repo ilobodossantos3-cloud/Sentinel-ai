@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ValidationError
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException
+)
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -18,6 +22,9 @@ from app.services.asset_service import (
     get_recent_incidents,
     register_asset,
 )
+from app.services.audit_checks import determine_web_url
+from app.services.audit_engine import run_audit
+from app.services.scheduler_service import create_audit_for_url
 
 
 router = APIRouter(
@@ -45,6 +52,7 @@ def list_assets(db: Session = Depends(get_db)):
             open_incidents=get_open_incident_count(db, asset.ip),
             first_seen_at=asset.first_seen_at,
             last_seen_at=asset.last_seen_at,
+            audit_url=asset.audit_url,
         )
         for asset in assets
     ]
@@ -77,6 +85,7 @@ def asset_detail(ip: str, db: Session = Depends(get_db)):
         open_incidents=get_open_incident_count(db, ip),
         first_seen_at=asset.first_seen_at,
         last_seen_at=asset.last_seen_at,
+        audit_url=asset.audit_url,
         recent_incidents=[
             {
                 "id": incident.id,
@@ -98,6 +107,7 @@ def asset_detail(ip: str, db: Session = Depends(get_db)):
 )
 def register(
     request: AssetRegisterRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     asset = register_asset(
@@ -107,6 +117,20 @@ def register(
         asset_type=request.asset_type,
         os_name=request.os_name,
     )
+
+    # Immediate security analysis: probe for a web service
+    # (https preferred) and launch an audit in the background.
+    if not asset.audit_url:
+        asset.audit_url = determine_web_url(asset.ip)
+        db.commit()
+
+    audit_id = None
+    if asset.audit_url:
+        audit = create_audit_for_url(
+            db, asset.audit_url, scope_note="auto: registered asset"
+        )
+        audit_id = audit.id
+        background_tasks.add_task(run_audit, audit_id)
 
     return AssetResponse(
         ip=asset.ip,
@@ -118,4 +142,63 @@ def register(
         open_incidents=get_open_incident_count(db, asset.ip),
         first_seen_at=asset.first_seen_at,
         last_seen_at=asset.last_seen_at,
+        audit_url=asset.audit_url,
     )
+
+
+@router.post(
+    "/{ip}/audit",
+    status_code=202
+)
+def audit_asset_now(
+    ip: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Manual on-demand security analysis of an asset."""
+    asset = get_asset_by_ip(db, ip)
+
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    if not asset.audit_url:
+        asset.audit_url = determine_web_url(asset.ip)
+        db.commit()
+
+    if not asset.audit_url:
+        # honest: no web service found, nothing to audit yet
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No web service detected on this asset "
+                "(ports 443/80 unreachable) — nothing to audit"
+            )
+        )
+
+    audit = create_audit_for_url(
+        db, asset.audit_url, scope_note="manual: on-demand"
+    )
+    background_tasks.add_task(run_audit, audit.id)
+
+    return {"audit_id": audit.id, "target_url": asset.audit_url}
+
+
+@router.delete(
+    "/{ip}",
+    status_code=200
+)
+def delete_asset(ip: str, db: Session = Depends(get_db)):
+    """Remove an asset from the inventory.
+
+    Incident history is preserved (it is the SOC record); the asset
+    re-appears automatically if traffic is observed again.
+    """
+    asset = get_asset_by_ip(db, ip)
+
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    db.delete(asset)
+    db.commit()
+
+    return {"deleted": ip}

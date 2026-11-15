@@ -220,6 +220,50 @@ def update_finding_status(
 
 
 @router.get(
+    "/schedule"
+)
+def schedule_status():
+    """Scheduler state: interval, last sweep, counts."""
+    from app.services.scheduler_service import get_schedule_status
+    return get_schedule_status()
+
+
+@router.post(
+    "/sweep",
+    status_code=202
+)
+def sweep_now(background_tasks: BackgroundTasks):
+    """Audit ALL known systems/assets immediately (manual sweep)."""
+    from app.services.scheduler_service import run_sweep
+
+    background_tasks.add_task(run_sweep)
+
+    return {"status": "sweep started"}
+
+
+@router.delete(
+    "/{audit_id}",
+    status_code=200
+)
+def delete_audit(audit_id: int, db: Session = Depends(get_db)):
+    """Remove an audit and its findings (operator housekeeping)."""
+    audit = db.get(Audit, audit_id)
+
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    (
+        db.query(AuditFinding)
+        .filter(AuditFinding.audit_id == audit_id)
+        .delete()
+    )
+    db.delete(audit)
+    db.commit()
+
+    return {"deleted": audit_id}
+
+
+@router.get(
     "/{audit_id}",
     response_model=AuditDetailResponse
 )

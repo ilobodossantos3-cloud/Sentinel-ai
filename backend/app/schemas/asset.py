@@ -20,6 +20,8 @@ class AssetResponse(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
 
+    audit_url: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

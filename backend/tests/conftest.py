@@ -8,6 +8,7 @@ import os  # noqa: E402
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_api.db"
 os.environ["OPENROUTER_API_KEY"] = "test-key"
+os.environ["AUDIT_SCHEDULE_ENABLED"] = "false"
 
 import http.server  # noqa: E402
 import socketserver  # noqa: E402

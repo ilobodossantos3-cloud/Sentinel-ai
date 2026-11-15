@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { getAssetDetail, getAssets, registerAsset } from "../services/api";
+import {
+  auditAssetNow,
+  deleteAsset,
+  getAssetDetail,
+  getAssets,
+  registerAsset,
+} from "../services/api";
 import { usePolling, timeAgo } from "../hooks";
 
 const STATUS_COLOR = {
@@ -16,11 +22,39 @@ export default function AssetsPage() {
   const [detail, setDetail] = useState(null);
   const [form, setForm] = useState({ ip: "", name: "", asset_type: "server" });
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   const refresh = () =>
     getAssets().then(setAssets).catch(() => setAssets([]));
 
   usePolling(refresh, 10000);
+
+  const analyze = async (ip) => {
+    setNotice(null);
+    try {
+      const res = await auditAssetNow(ip);
+      setNotice(`Análise #${res.audit_id} lançada para ${ip} (${res.target_url}). Vê-a na rota Audits.`);
+    } catch (err) {
+      const msg = err?.response?.data?.detail;
+      setNotice(
+        typeof msg === "string"
+          ? msg
+          : `Não foi possível lançar a análise para ${ip}.`
+      );
+    }
+  };
+
+  const remove = async (ip) => {
+    if (!window.confirm(`Remover o ativo ${ip} do inventário?`)) return;
+    setNotice(null);
+    try {
+      await deleteAsset(ip);
+      setNotice(`Ativo ${ip} removido. O histórico de incidentes foi preservado.`);
+      refresh();
+    } catch {
+      setNotice(`Não foi possível remover ${ip}.`);
+    }
+  };
 
   const open = async (ip) => {
     setSelected(ip);
@@ -56,9 +90,14 @@ export default function AssetsPage() {
         </div>
       </div>
 
+      {notice && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <div className="state" style={{ margin: 0 }}>{notice}</div>
+        </div>
+      )}
+
       <div className="panel" style={{ marginBottom: 14 }}>
-        <form onSubmit={submit} className="filters" style={{ alignItems: "center" }}>
-          <input
+        <form onSubmit={submit} className="filters" style={{ alignItems: "center" }}>          <input
             placeholder="Endereço IP (ex.: 10.10.10.10)"
             value={form.ip}
             onChange={(e) => setForm({ ...form, ip: e.target.value })}
@@ -127,6 +166,7 @@ export default function AssetsPage() {
                 <th>Tipo</th>
                 <th>Incidentes abertos</th>
                 <th>Visto</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -141,6 +181,24 @@ export default function AssetsPage() {
                   <td>{asset.asset_type}</td>
                   <td>{asset.open_incidents}</td>
                   <td>{timeAgo(asset.last_seen_at)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <span style={{ display: "flex", gap: 4 }}>
+                      <button
+                        title="Análise de segurança agora"
+                        onClick={() => analyze(asset.ip)}
+                        style={{ fontSize: 10, padding: "3px 8px" }}
+                      >
+                        ⚡ Analisar
+                      </button>
+                      <button
+                        title="Remover do inventário"
+                        onClick={() => remove(asset.ip)}
+                        style={{ fontSize: 10, padding: "3px 8px" }}
+                      >
+                        🗑
+                      </button>
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -170,6 +228,10 @@ export default function AssetsPage() {
                   <div><span>SO</span><b>{detail.os_name || "—"}</b></div>
                   <div><span>Incidentes abertos</span><b>{detail.open_incidents}</b></div>
                   <div><span>Visto</span><b>{timeAgo(detail.last_seen_at)} atrás</b></div>
+                  <div>
+                    <span>URL de auditoria</span>
+                    <b>{detail.audit_url || "— (sem serviço web detetado)"}</b>
+                  </div>
                 </div>
 
                 {detail.recent_incidents?.map((inc) => (

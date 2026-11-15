@@ -67,6 +67,25 @@ export const getVulnerabilityDetail = (vulnId) =>
 export const patchVulnerabilityStatus = (vulnId, status) =>
   api.patch(`/vulnerabilities/${vulnId}`, { status }).then((r) => r.data);
 
+// lifecycle (delete / on-demand analysis)
+export const deleteAsset = (ip) =>
+  api.delete(`/assets/${ip}`).then((r) => r.data);
+
+export const auditAssetNow = (ip) =>
+  api.post(`/assets/${ip}/audit`).then((r) => r.data);
+
+export const deleteIncident = (id) =>
+  api.delete(`/incidents/${id}`).then((r) => r.data);
+
+export const deleteAudit = (id) =>
+  api.delete(`/audits/${id}`).then((r) => r.data);
+
+export const sweepAudits = () =>
+  api.post("/audits/sweep").then((r) => r.data);
+
+export const getScheduleStatus = () =>
+  api.get("/audits/schedule").then((r) => r.data);
+
 // dashboard
 export const getTopology = () =>
   api.get("/topology").then((r) => r.data);

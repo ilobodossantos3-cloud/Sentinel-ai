@@ -36,6 +36,10 @@ class Asset(Base):
     # False when only inferred from observed traffic.
     is_registered = Column(Boolean, nullable=False, default=False)
 
+    # Web URL determined by probing (https preferred), used by
+    # the audit engine. NULL = no web service detected yet.
+    audit_url = Column(String(500), nullable=True)
+
     first_seen_at = Column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),

@@ -1,4 +1,5 @@
 import {
+  deleteIncident,
   generateAnalysis,
   getIncidentAnalysis,
   getIncidentIntel,
@@ -77,7 +78,26 @@ export default function IncidentModal({ incident, onClose, onChanged }) {
               Incidente #{incident.id} · {new Date(incident.created_at).toLocaleString()}
             </span>
           </div>
-          <button className="close-x" onClick={onClose}>✕</button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  title="Apagar incidente"
+                  onClick={async () => {
+                    if (!window.confirm(`Apagar incidente #${incident.id} e as suas análises?`)) return;
+                    setActing(true);
+                    try {
+                      await deleteIncident(incident.id);
+                      onChanged?.();
+                      onClose();
+                    } finally {
+                      setActing(false);
+                    }
+                  }}
+                  style={{ fontSize: 11, padding: "4px 10px" }}
+                >
+                  🗑
+                </button>
+                <button className="close-x" onClick={onClose}>✕</button>
+              </div>
         </div>
 
         <div className="kv">
