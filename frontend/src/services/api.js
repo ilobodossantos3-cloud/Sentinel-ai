@@ -80,7 +80,17 @@ export const getAlertStats = () =>
 export const getActivity = () =>
   api.get("/activity").then((r) => r.data);
 
+// threat intel
 export const getThreatIntel = () =>
   api.get("/threat-intel").then((r) => r.data);
+
+export const getIntelFeeds = () =>
+  api.get("/threat-intel/feeds").then((r) => r.data);
+
+export const refreshIntelFeeds = () =>
+  api.post("/threat-intel/refresh").then((r) => r.data);
+
+export const getIncidentIntel = (id) =>
+  api.get(`/incidents/${id}/intel`).then((r) => r.data);
 
 export default api;

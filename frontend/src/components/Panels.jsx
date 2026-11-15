@@ -154,7 +154,7 @@ export function AlertOverview({ stats }) {
   );
 }
 
-export function ThreatIntelligence({ intel }) {
+export function ThreatIntelligence({ intel, feeds, onRefresh, refreshing }) {
   return (
     <div className="panel">
       <div className="panel-head">
@@ -185,6 +185,33 @@ export function ThreatIntelligence({ intel }) {
                 <span className="t">{ind.type || "ioc"}</span>
                 <span className="v">{ind.value || String(ind)}</span>
                 <span className="when">#{ind.incident_id}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 14, borderTop: "1px solid var(--panel-border-soft)", paddingTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <b style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-dim)" }}>
+                Feeds reais
+              </b>
+              <button
+                onClick={onRefresh}
+                disabled={refreshing}
+                style={{ fontSize: 10, padding: "3px 10px" }}
+              >
+                {refreshing ? "a refrescar…" : "⟳ Refresh"}
+              </button>
+            </div>
+
+            {!feeds && <div className="state" style={{ fontSize: 11 }}>a carregar feeds…</div>}
+
+            {feeds && feeds.map((f) => (
+              <div className="ioc" key={f.source}>
+                <span className="t">{f.category}</span>
+                <span className="v">{f.source}</span>
+                <span className="when">
+                  {f.entries} IPs · {f.last_refresh ? new Date(f.last_refresh).toLocaleTimeString() : "nunca"}
+                </span>
               </div>
             ))}
           </div>

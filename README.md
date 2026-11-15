@@ -102,6 +102,9 @@ Regras de exemplo: `detection/rules/sentinel.rules`.
 | GET | `/posture` | score de segurança calculado de dados reais |
 | GET | `/activity` | feed de atividade da plataforma |
 | GET | `/threat-intel` | inteligência de ameaças agregada |
+| GET | `/threat-intel/feeds` | estado das feeds reais (FireHOL, abuse.ch, Tor, IPsum) |
+| POST | `/threat-intel/refresh` | refrescar feeds (job em background) |
+| GET | `/incidents/{id}/intel` | correspondeências do incidente nas feeds |
 
 ## Testes
 

@@ -9,6 +9,7 @@ from app.models.incident_analysis import IncidentAnalysis
 from app.models.asset import Asset
 from app.models.job import Job
 from app.models.audit import AuditTarget, Audit, AuditFinding
+from app.models.threat_intel import ThreatIntelEntry
 
 from app.api.incidents import router as incidents_router
 from app.api.incident_analysis import router as analysis_router
@@ -17,6 +18,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.ingest import router as ingest_router
 from app.api.audits import router as audits_router
 from app.api.vulnerabilities import router as vulnerabilities_router
+from app.api.intel import router as intel_router, incident_intel_router
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -53,6 +55,8 @@ app.include_router(dashboard_router)
 app.include_router(ingest_router)
 app.include_router(audits_router)
 app.include_router(vulnerabilities_router)
+app.include_router(intel_router)
+app.include_router(incident_intel_router)
 
 
 @app.get("/")

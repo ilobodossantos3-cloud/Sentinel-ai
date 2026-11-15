@@ -1,13 +1,20 @@
-import { getIncidentAnalysis, generateAnalysis, patchIncidentStatus } from "../services/api";
+import {
+  generateAnalysis,
+  getIncidentAnalysis,
+  getIncidentIntel,
+  patchIncidentStatus,
+} from "../services/api";
 import { useEffect, useState } from "react";
 
 /**
- * Incident detail modal: real data + AI analysis + lifecycle actions.
+ * Incident detail modal: real data + AI analysis + lifecycle actions
+ * + threat-intel feed matches (real feeds only).
  */
 export default function IncidentModal({ incident, onClose, onChanged }) {
   const [analysis, setAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
   const [analysisError, setAnalysisError] = useState(false);
+  const [intelMatches, setIntelMatches] = useState(null);
   const [acting, setActing] = useState(false);
 
   useEffect(() => {
@@ -15,6 +22,7 @@ export default function IncidentModal({ incident, onClose, onChanged }) {
     setAnalysis(null);
     setAnalysisError(false);
     setAnalysisLoading(true);
+    setIntelMatches(null);
 
     getIncidentAnalysis(incident.id)
       .then((data) => { if (!cancelled) setAnalysis(data); })
@@ -23,6 +31,10 @@ export default function IncidentModal({ incident, onClose, onChanged }) {
         if (!cancelled) setAnalysisError(err?.response?.status !== 404);
       })
       .finally(() => { if (!cancelled) setAnalysisLoading(false); });
+
+    getIncidentIntel(incident.id)
+      .then((data) => { if (!cancelled) setIntelMatches(data.matches); })
+      .catch(() => { if (!cancelled) setIntelMatches([]); });
 
     return () => { cancelled = true; };
   }, [incident.id]);
@@ -77,6 +89,27 @@ export default function IncidentModal({ incident, onClose, onChanged }) {
 
         {incident.description && (
           <p className="muted">{incident.description}</p>
+        )}
+
+        {intelMatches && intelMatches.length > 0 && (
+          <div style={{
+            border: "1px solid rgba(239,68,68,.35)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            margin: "10px 0",
+            background: "rgba(239,68,68,.06)",
+          }}>
+            <b style={{ fontSize: 11.5, color: "var(--red)" }}>
+              ⚠ Corresponde a feeds de threat intelligence
+            </b>
+            {intelMatches.map((m, i) => (
+              <div className="ioc" key={i}>
+                <span className="t">{m.category}</span>
+                <span className="v">{m.ip} — {m.source}</span>
+                <span className="when">feed</span>
+              </div>
+            ))}
+          </div>
         )}
 
         <div className="actions-row">

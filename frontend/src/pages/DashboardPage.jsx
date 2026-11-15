@@ -4,9 +4,11 @@ import {
   getAlertStats,
   getActivity,
   getIncidents,
+  getIntelFeeds,
   getPosture,
   getThreatIntel,
   getTopology,
+  refreshIntelFeeds,
 } from "../services/api";
 import { usePolling } from "../hooks";
 import TopologyPanel from "../components/TopologyPanel.jsx";
@@ -27,6 +29,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState(null);
   const [intel, setIntel] = useState(null);
+  const [feeds, setFeeds] = useState(null);
+  const [refreshingFeeds, setRefreshingFeeds] = useState(false);
   const [assets, setAssets] = useState(null);
   const [selected, setSelected] = useState(null);
 
@@ -39,8 +43,9 @@ export default function DashboardPage() {
       getActivity(),
       getThreatIntel(),
       getAssets(),
+      getIntelFeeds(),
     ]);
-    const [t, i, p, s, a, th, as] = results;
+    const [t, i, p, s, a, th, as, fd] = results;
     if (t.status === "fulfilled") setTopology(t.value);
     if (i.status === "fulfilled") setIncidents(i.value);
     if (p.status === "fulfilled") setPosture(p.value);
@@ -48,7 +53,19 @@ export default function DashboardPage() {
     if (a.status === "fulfilled") setActivity(a.value);
     if (th.status === "fulfilled") setIntel(th.value);
     if (as.status === "fulfilled") setAssets(as.value);
+    if (fd.status === "fulfilled") setFeeds(fd.value);
   }, 10000);
+
+  const doRefreshFeeds = async () => {
+    setRefreshingFeeds(true);
+    try {
+      await refreshIntelFeeds();
+      // give the background job a moment, then reload feed status
+      setTimeout(() => getIntelFeeds().then(setFeeds).catch(() => {}), 4000);
+    } finally {
+      setRefreshingFeeds(false);
+    }
+  };
 
   return (
     <>
@@ -67,7 +84,12 @@ export default function DashboardPage() {
 
         <div className="dash-bottom">
           <AlertOverview stats={stats} />
-          <ThreatIntelligence intel={intel} />
+          <ThreatIntelligence
+            intel={intel}
+            feeds={feeds}
+            onRefresh={doRefreshFeeds}
+            refreshing={refreshingFeeds}
+          />
           <AssetHealth assets={assets} />
         </div>
       </div>

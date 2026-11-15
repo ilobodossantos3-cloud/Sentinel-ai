@@ -15,6 +15,7 @@ import app.models.incident_analysis  # noqa: F401
 import app.models.asset  # noqa: F401
 import app.models.job  # noqa: F401
 import app.models.audit  # noqa: F401
+import app.models.threat_intel  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
